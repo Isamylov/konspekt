@@ -1,0 +1,21 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+      - run: scripts/build-app.sh
+      - run: ditto -c -k --keepParent .build/Konspekt.app Konspekt.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Konspekt
+          path: Konspekt.zip
