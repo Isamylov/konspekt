@@ -31,7 +31,7 @@ rm -rf "$APP"
 ditto .build/Konspekt.app "$APP"
 
 if [ ! -e "$CONFIG_DIR/.env" ]; then
-    cp .env "$CONFIG_DIR/.env"
+    (umask 077; cp .env "$CONFIG_DIR/.env")
     chmod 600 "$CONFIG_DIR/.env"
 fi
 
