@@ -11,41 +11,73 @@ public struct SessionStatus: Codable, Equatable {
     public var start: Date
     public var end: Date?
     public init(state: SessionState, attempts: Int, lastError: String?, start: Date, end: Date?) {
-        fatalError("not implemented (T3)")
+        self.state = state
+        self.attempts = attempts
+        self.lastError = lastError
+        self.start = start
+        self.end = end
     }
 }
 
 public struct Session {
     public let dir: URL
-    public var name: String { fatalError("not implemented (T3)") }
-    public var micURL: URL { fatalError("not implemented (T3)") }
-    public var callURL: URL { fatalError("not implemented (T3)") }
-    public var transcriptURL: URL { fatalError("not implemented (T3)") }
-    public var summaryURL: URL { fatalError("not implemented (T3)") }
-    public var chunksDir: URL { fatalError("not implemented (T3)") }
+    public var name: String { dir.lastPathComponent }
+    public var micURL: URL { dir.appendingPathComponent("mic.caf") }
+    public var callURL: URL { dir.appendingPathComponent("call.caf") }
+    public var transcriptURL: URL { dir.appendingPathComponent("transcript.md") }
+    public var summaryURL: URL { dir.appendingPathComponent("summary.md") }
+    public var chunksDir: URL { dir.appendingPathComponent("chunks") }
+    var statusURL: URL { dir.appendingPathComponent("status.json") }
     public init(dir: URL) {
-        fatalError("not implemented (T3)")
+        self.dir = dir
     }
     public func readStatus() throws -> SessionStatus {
-        fatalError("not implemented (T3)")
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return try d.decode(SessionStatus.self, from: Data(contentsOf: statusURL))
     }
     public func write(_ s: SessionStatus) throws {
-        fatalError("not implemented (T3)")
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        e.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try e.encode(s).write(to: statusURL, options: .atomic)
     }
 }
 
 public struct SessionStore {
     public let root: URL
     public init(root: URL) {
-        fatalError("not implemented (T3)")
+        self.root = root
     }
     public func create(start: Date) throws -> Session {
-        fatalError("not implemented (T3)")
+        let fm = FileManager.default
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        let base = f.string(from: start)
+        var name = base
+        var n = 1
+        while fm.fileExists(atPath: root.appendingPathComponent(name).path) {
+            n += 1
+            name = "\(base)-\(n)"
+        }
+        let session = Session(dir: root.appendingPathComponent(name))
+        try fm.createDirectory(at: session.dir, withIntermediateDirectories: false)
+        try session.write(SessionStatus(state: .recording, attempts: 0, lastError: nil, start: start, end: nil))
+        return session
     }
     public func all() -> [Session] {
-        fatalError("not implemented (T3)")
+        let urls = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+        return urls.map { Session(dir: $0) }
+            .filter { (try? $0.readStatus()) != nil }
+            .sorted { $0.name < $1.name }
     }
     public func pending() -> [Session] {
-        fatalError("not implemented (T3)")
+        all().filter {
+            guard let s = try? $0.readStatus() else { return false }
+            return s.state == .recorded || s.state == .transcribed
+        }
     }
 }

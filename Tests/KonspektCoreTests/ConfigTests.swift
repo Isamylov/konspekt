@@ -1,0 +1,41 @@
+import Testing
+import Foundation
+@testable import KonspektCore
+
+@Suite struct ConfigTests {
+    func load(_ text: String) throws -> Config {
+        let f = FileManager.default.temporaryDirectory.appendingPathComponent("env-\(UUID().uuidString)")
+        try text.write(to: f, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: f) }
+        return try Config.load(envFile: f)
+    }
+    let home = FileManager.default.homeDirectoryForCurrentUser
+
+    @Test func test_defaults() throws {
+        let c = try load("OPENAI_BASE_URL=\"https://h/v1\"\nOPENAI_API_KEY=k\nOPENAI_MODEL_NAME=asr\n# c")
+        #expect(c.baseURL == URL(string: "https://h/v1")!)
+        #expect(c.apiKey == "k")
+        #expect(c.asrModel == "asr")
+        #expect(c.summaryModel == "qwen-3.8-27b")
+        #expect(c.outputDir.path == home.appendingPathComponent("Documents/Konspekt").path)
+    }
+    @Test func test_missing_key_throws() {
+        #expect(throws: ConfigError.missing("OPENAI_API_KEY")) {
+            try load("OPENAI_BASE_URL=https://h\nOPENAI_MODEL_NAME=asr")
+        }
+    }
+    @Test func test_tilde_expanded() throws {
+        let c = try load("OPENAI_BASE_URL=https://h\nOPENAI_API_KEY=k\nOPENAI_MODEL_NAME=a\nKONSPEKT_DIR=~/x")
+        #expect(c.outputDir.path == home.appendingPathComponent("x").path)
+    }
+    @Test func test_export_quotes_summary() throws {
+        let c = try load("export OPENAI_BASE_URL='https://h'\n\nexport OPENAI_API_KEY=\"k\"\nOPENAI_MODEL_NAME=a\nSUMMARY_MODEL_NAME=m")
+        #expect(c.baseURL.absoluteString == "https://h")
+        #expect(c.apiKey == "k")
+        #expect(c.summaryModel == "m")
+    }
+    @Test func test_unreadable() {
+        let f = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString)")
+        #expect(throws: ConfigError.unreadable(f.path)) { try Config.load(envFile: f) }
+    }
+}
