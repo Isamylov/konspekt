@@ -56,6 +56,7 @@ final class Daemon {
         for s in store.all() {
             if var st = try? s.readStatus(), st.state == .recording {
                 st.state = .recorded
+                st.end = st.end ?? Date()
                 try? s.write(st)
             }
         }
@@ -83,7 +84,7 @@ final class Daemon {
         if current != nil { recorder.setMicGate(open: state.input) }
         switch detector.feed(state, at: now) {
         case .started(let t):
-            startCall(at: t, objects: objs)
+            startCall(at: t, objects: objs, micOpen: state.input)
         case .ended(let t):
             finishCall(at: t)
             enqueuePending()
@@ -92,17 +93,20 @@ final class Daemon {
         }
     }
 
-    func startCall(at t: Date, objects: [AudioObjectID]) {
+    func startCall(at t: Date, objects: [AudioObjectID], micOpen: Bool) {
         do {
             let s = try store.create(start: t)
             var st = try s.readStatus()
             log("call started, session \(s.name)")
             do {
+                recorder.setMicGate(open: micOpen)
                 try recorder.start(session: s, processObjects: objects)
                 current = (s, st)
             } catch {
                 log("recorder failed: \(error)")
+                recorder.stop()
                 st.state = .recorded
+                st.end = t
                 st.lastError = "recorder: \(error)"
                 try? s.write(st)
             }
