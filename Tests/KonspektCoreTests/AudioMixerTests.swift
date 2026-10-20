@@ -32,6 +32,20 @@ import AVFoundation
         #expect(abs(s[8000] - 0.25) < 0.01)
     }
 
+    @Test func test_stereo_right_only_downmixed() throws {
+        let d = tmp()
+        let url = d.appendingPathComponent("r.caf")
+        let fmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48000, channels: 2, interleaved: false)!
+        let file = try AVAudioFile(forWriting: url, settings: fmt.settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+        let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: 48000)!
+        buf.frameLength = 48000
+        for i in 0..<48000 { buf.floatChannelData![0][i] = 0; buf.floatChannelData![1][i] = 0.5 }
+        try file.write(from: buf)
+        let s = try AudioMixer.mixToMono16k([url])
+        #expect(abs(s.count - 16000) <= 2)
+        #expect(abs(s[8000] - 0.25) < 0.02)
+    }
+
     @Test func test_mix_two_lengths() throws {
         let d = tmp()
         let a = makeCAF(d, "a.caf", rate: 16000, channels: 1, seconds: 2, value: 0.2)

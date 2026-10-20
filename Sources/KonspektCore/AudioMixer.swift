@@ -24,6 +24,7 @@ public enum AudioMixer {
         guard let conv = AVAudioConverter(from: inFmt, to: outFmt) else {
             throw NSError(domain: "AudioMixer", code: 1, userInfo: [NSLocalizedDescriptionKey: "cannot convert \(url.lastPathComponent)"])
         }
+        conv.downmix = true
         let block = AVAudioFrameCount(inFmt.sampleRate)
         let outCap = AVAudioFrameCount(rate * 1.5) + 1024
         var out: [Float] = []
