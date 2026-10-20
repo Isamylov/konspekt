@@ -114,6 +114,7 @@ public final class Recorder {
             engine?.inputNode.removeTap(onBus: 0)
             engine = nil
             lock.lock(); micFile = nil; lock.unlock()
+            try? FileManager.default.removeItem(at: url)
         }
     }
 
