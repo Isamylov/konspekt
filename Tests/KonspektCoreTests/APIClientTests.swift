@@ -93,3 +93,14 @@ func makeClient(_ t: FakeTransport) -> APIClient {
         catch { Issue.record("wrong error \(error)") }
     }
 }
+
+@Suite struct APIKeyRedactionTests {
+    @Test func test_key_redacted_in_http_error() async {
+        let t = FakeTransport("Incorrect API key: secret-key-123", 401)
+        let cfg = Config(baseURL: URL(string: "https://h/v1")!, apiKey: "secret-key-123", asrModel: "a",
+                         summaryModel: "s", outputDir: URL(fileURLWithPath: "/tmp/x"))
+        do { _ = try await APIClient(config: cfg, transport: t).transcribe(wav: Data()); Issue.record("no throw") }
+        catch APIError.http(_, let m) { #expect(!m.contains("secret-key-123")) }
+        catch { Issue.record("wrong error") }
+    }
+}

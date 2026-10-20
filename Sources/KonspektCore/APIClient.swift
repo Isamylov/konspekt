@@ -63,9 +63,15 @@ public struct APIClient: Transcriber, Summarizer {
         let status: Int
         do { (data, status) = try await t.send(req) }
         catch let e as APIError { throw e }
-        catch { throw APIError.transport(error.localizedDescription) }
+        catch {
+            var m = error.localizedDescription
+            if !config.apiKey.isEmpty { m = m.replacingOccurrences(of: config.apiKey, with: "***") }
+            throw APIError.transport(m)
+        }
         guard (200..<300).contains(status) else {
-            throw APIError.http(status, String(String(decoding: data, as: UTF8.self).prefix(500)))
+            var body = String(decoding: data, as: UTF8.self)
+            if !config.apiKey.isEmpty { body = body.replacingOccurrences(of: config.apiKey, with: "***") }
+            throw APIError.http(status, String(body.prefix(500)))
         }
         return data
     }
