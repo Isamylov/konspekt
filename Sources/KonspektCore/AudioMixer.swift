@@ -12,7 +12,7 @@ public enum AudioMixer {
             if track.count > mix.count { mix.append(contentsOf: [Float](repeating: 0, count: track.count - mix.count)) }
             for i in 0..<track.count { mix[i] += track[i] }
         }
-        for i in 0..<mix.count { mix[i] = min(1, max(-1, mix[i])) }
+        for i in 0..<mix.count { mix[i] = mix[i].isNaN ? 0 : min(1, max(-1, mix[i])) }
         return mix
     }
 
@@ -56,7 +56,7 @@ public enum AudioMixer {
         d.append(contentsOf: Array("fmt ".utf8)); u32(16); u16(1); u16(1); u32(16000); u32(32000); u16(2); u16(16)
         d.append(contentsOf: Array("data".utf8)); u32(dataLen)
         for s in samples {
-            u16(UInt16(bitPattern: Int16(max(-1, min(1, s)) * 32767)))
+            u16(UInt16(bitPattern: s.isNaN ? 0 : Int16(max(-1, min(1, s)) * 32767)))
         }
         return d
     }

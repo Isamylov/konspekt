@@ -88,3 +88,10 @@ import AVFoundation
         #expect(w[40] == 8)
     }
 }
+
+@Suite struct AudioMixerNaNTests {
+    @Test func test_wav_nan_does_not_trap() {
+        let d = AudioMixer.wav16k([Float.nan, 0.5][...])
+        #expect(d.count == 44 + 4)
+    }
+}
