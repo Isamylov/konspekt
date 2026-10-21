@@ -18,19 +18,7 @@ public struct Config: Equatable {
         guard let text = try? String(contentsOf: envFile, encoding: .utf8) else {
             throw ConfigError.unreadable(envFile.path)
         }
-        var env: [String: String] = [:]
-        for raw in text.components(separatedBy: .newlines) {
-            var line = raw.trimmingCharacters(in: .whitespaces)
-            if line.isEmpty || line.hasPrefix("#") { continue }
-            if line.hasPrefix("export ") { line = String(line.dropFirst(7)) }
-            guard let eq = line.firstIndex(of: "=") else { continue }
-            let key = line[..<eq].trimmingCharacters(in: .whitespaces)
-            var value = line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces)
-            if value.count >= 2, let f = value.first, f == value.last, f == "\"" || f == "'" {
-                value = String(value.dropFirst().dropLast())
-            }
-            env[key] = value
-        }
+        let env = parse(text)
         func need(_ k: String) throws -> String {
             guard let v = env[k], !v.isEmpty else { throw ConfigError.missing(k) }
             return v
@@ -39,15 +27,52 @@ public struct Config: Equatable {
         let key = try need("OPENAI_API_KEY")
         let asr = try need("OPENAI_MODEL_NAME")
         guard let url = URL(string: base) else { throw ConfigError.missing("OPENAI_BASE_URL") }
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        var out = home.appendingPathComponent("Documents/Konspekt")
-        if let d = env["KONSPEKT_DIR"], !d.isEmpty {
-            if d == "~" { out = home }
-            else if d.hasPrefix("~/") { out = home.appendingPathComponent(String(d.dropFirst(2))) }
-            else { out = URL(fileURLWithPath: d) }
-        }
         let sm = env["SUMMARY_MODEL_NAME"].flatMap { $0.isEmpty ? nil : $0 } ?? "qwen-3.8-27b"
-        return Config(baseURL: url, apiKey: key, asrModel: asr, summaryModel: sm, outputDir: out)
+        return Config(baseURL: url, apiKey: key, asrModel: asr, summaryModel: sm, outputDir: outputDir(env))
+    }
+
+    public static func parse(_ text: String) -> [String: String] {
+        var env: [String: String] = [:]
+        for raw in text.components(separatedBy: .newlines) {
+            guard let (key, value) = entry(raw) else { continue }
+            env[key] = value
+        }
+        return env
+    }
+
+    public static func outputDir(_ env: [String: String]) -> URL {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        guard let d = env["KONSPEKT_DIR"], !d.isEmpty else { return home.appendingPathComponent("Documents/Konspekt") }
+        if d == "~" { return home }
+        if d.hasPrefix("~/") { return home.appendingPathComponent(String(d.dropFirst(2))) }
+        return URL(fileURLWithPath: d)
+    }
+
+    /// Replaces the given keys in .env text in place, appends missing ones, keeps everything else.
+    public static func updating(_ text: String, with values: [String: String]) -> String {
+        var lines = text.isEmpty ? [] : text.components(separatedBy: "\n")
+        if lines.last == "" { lines.removeLast() }
+        var left = values
+        for i in lines.indices {
+            guard let (key, _) = entry(lines[i]), let v = left[key] else { continue }
+            lines[i] = "\(key)=\(v)"
+            left[key] = nil
+        }
+        for key in left.keys.sorted() { lines.append("\(key)=\(left[key]!)") }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    private static func entry(_ raw: String) -> (String, String)? {
+        var line = raw.trimmingCharacters(in: .whitespaces)
+        if line.isEmpty || line.hasPrefix("#") { return nil }
+        if line.hasPrefix("export ") { line = String(line.dropFirst(7)) }
+        guard let eq = line.firstIndex(of: "=") else { return nil }
+        let key = line[..<eq].trimmingCharacters(in: .whitespaces)
+        var value = line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+        if value.count >= 2, let f = value.first, f == value.last, f == "\"" || f == "'" {
+            value = String(value.dropFirst().dropLast())
+        }
+        return (key, value)
     }
 }
 

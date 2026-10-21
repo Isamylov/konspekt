@@ -38,4 +38,13 @@ import Foundation
         let f = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString)")
         #expect(throws: ConfigError.unreadable(f.path)) { try Config.load(envFile: f) }
     }
+    @Test func test_updating_replaces_and_appends() {
+        let text = "# c\nexport OPENAI_API_KEY=\"old\"\nOPENAI_MODEL_NAME=a\nOTHER=x\n"
+        let out = Config.updating(text, with: ["OPENAI_API_KEY": "new", "SUMMARY_MODEL_NAME": "m"])
+        #expect(out == "# c\nOPENAI_API_KEY=new\nOPENAI_MODEL_NAME=a\nOTHER=x\nSUMMARY_MODEL_NAME=m\n")
+        #expect(Config.parse(out)["OPENAI_API_KEY"] == "new")
+    }
+    @Test func test_updating_empty() {
+        #expect(Config.updating("", with: ["A": "1"]) == "A=1\n")
+    }
 }

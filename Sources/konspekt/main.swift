@@ -7,13 +7,20 @@ func fail(_ msg: String, _ code: Int32) -> Never {
 }
 
 let args = Array(CommandLine.arguments.dropFirst())
-let commands = ["daemon", "status", "retry", "process"]
-guard let cmd = args.first, commands.contains(cmd), cmd != "process" || args.count == 2 else {
-    fail("usage: konspekt daemon | status | retry | process <dir>", 64)
-}
-
 let configPath = ProcessInfo.processInfo.environment["KONSPEKT_CONFIG"]
     ?? NSHomeDirectory() + "/.config/konspekt/.env"
+
+// No arguments (opened from Finder): show the settings window.
+if args.isEmpty || args[0].hasPrefix("-psn") {
+    KonspektApp.main()
+    exit(0)
+}
+
+let commands = ["daemon", "status", "retry", "process"]
+guard let cmd = args.first, commands.contains(cmd), cmd != "process" || args.count == 2 else {
+    fail("usage: konspekt [daemon | status | retry | process <dir>]", 64)
+}
+
 let config: Config
 do {
     config = try Config.load(envFile: URL(fileURLWithPath: configPath))
