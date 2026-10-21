@@ -20,6 +20,37 @@ func launchctl(_ args: String...) -> (status: Int32, output: String) {
     return (p.terminationStatus, String(decoding: data, as: UTF8.self))
 }
 
+/// Writes the LaunchAgent plist when it is missing or points to another executable
+/// (app installed from the release zip instead of scripts/install.sh, or moved).
+/// Returns an error message, or nil on success.
+func ensureAgentPlist() -> String? {
+    guard let exe = Bundle.main.executablePath else { return "Не найден исполняемый файл приложения" }
+    if exe.contains("/AppTranslocation/") {
+        return "Переместите Konspekt.app в папку Программы и откройте его снова"
+    }
+    if (NSDictionary(contentsOfFile: agentPlist)?["ProgramArguments"] as? [String])?.first == exe { return nil }
+    let log = NSHomeDirectory() + "/Library/Logs/konspekt.log"
+    let plist: [String: Any] = [
+        "Label": agentLabel,
+        "ProgramArguments": [exe, "daemon"],
+        "RunAtLoad": true,
+        "KeepAlive": true,
+        "StandardOutPath": log,
+        "StandardErrorPath": log,
+        "ProcessType": "Interactive",
+    ]
+    do {
+        let fm = FileManager.default
+        try fm.createDirectory(atPath: (agentPlist as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: (log as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        try data.write(to: URL(fileURLWithPath: agentPlist), options: .atomic)
+        return nil
+    } catch {
+        return "Не удалось создать LaunchAgent: \(error.localizedDescription)"
+    }
+}
+
 struct CallRow: Identifiable {
     let session: Session
     let status: SessionStatus
@@ -66,6 +97,12 @@ final class AppModel: ObservableObject {
             r = launchctl("bootout", agentTarget)
         } else if launchctl("print", agentTarget).status == 0 {
             r = launchctl("kickstart", agentTarget)
+        } else if !FileManager.default.fileExists(atPath: configURL.path) {
+            message = "Сначала заполните и сохраните настройки инференса"
+            return
+        } else if let err = ensureAgentPlist() {
+            message = err
+            return
         } else {
             r = launchctl("bootstrap", "gui/\(getuid())", agentPlist)
         }
