@@ -6,12 +6,18 @@ public struct Config: Equatable {
     public var asrModel: String
     public var summaryModel: String
     public var outputDir: URL
-    public init(baseURL: URL, apiKey: String, asrModel: String, summaryModel: String, outputDir: URL) {
+    /// Files with prompts, read on every request so edits apply without a restart.
+    public var transcriptionPromptFile: URL?
+    public var summaryPromptFile: URL?
+    public init(baseURL: URL, apiKey: String, asrModel: String, summaryModel: String, outputDir: URL,
+                transcriptionPromptFile: URL? = nil, summaryPromptFile: URL? = nil) {
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.asrModel = asrModel
         self.summaryModel = summaryModel
         self.outputDir = outputDir
+        self.transcriptionPromptFile = transcriptionPromptFile
+        self.summaryPromptFile = summaryPromptFile
     }
 
     public static func load(envFile: URL) throws -> Config {
@@ -28,7 +34,9 @@ public struct Config: Equatable {
         let asr = try need("OPENAI_MODEL_NAME")
         guard let url = URL(string: base) else { throw ConfigError.missing("OPENAI_BASE_URL") }
         let sm = env["SUMMARY_MODEL_NAME"].flatMap { $0.isEmpty ? nil : $0 } ?? "qwen-3.8-27b"
-        return Config(baseURL: url, apiKey: key, asrModel: asr, summaryModel: sm, outputDir: outputDir(env))
+        return Config(baseURL: url, apiKey: key, asrModel: asr, summaryModel: sm, outputDir: outputDir(env),
+                      transcriptionPromptFile: env["TRANSCRIPTION_PROMPT_FILE"].flatMap(path),
+                      summaryPromptFile: env["SUMMARY_PROMPT_FILE"].flatMap(path))
     }
 
     public static func parse(_ text: String) -> [String: String] {
@@ -41,8 +49,14 @@ public struct Config: Equatable {
     }
 
     public static func outputDir(_ env: [String: String]) -> URL {
+        env["KONSPEKT_DIR"].flatMap(path)
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents/Konspekt")
+    }
+
+    /// Expands a leading "~"; nil for an empty value.
+    public static func path(_ d: String) -> URL? {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        guard let d = env["KONSPEKT_DIR"], !d.isEmpty else { return home.appendingPathComponent("Documents/Konspekt") }
+        if d.isEmpty { return nil }
         if d == "~" { return home }
         if d.hasPrefix("~/") { return home.appendingPathComponent(String(d.dropFirst(2))) }
         return URL(fileURLWithPath: d)

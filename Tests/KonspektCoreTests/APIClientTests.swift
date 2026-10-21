@@ -94,6 +94,55 @@ func makeClient(_ t: FakeTransport) -> APIClient {
     }
 }
 
+@Suite struct PromptFileTests {
+    func file(_ text: String) throws -> URL {
+        let f = FileManager.default.temporaryDirectory.appendingPathComponent("prompt-\(UUID().uuidString)")
+        try text.write(to: f, atomically: true, encoding: .utf8)
+        return f
+    }
+    func client(_ t: FakeTransport, asr: URL? = nil, sum: URL? = nil) -> APIClient {
+        let cfg = Config(baseURL: URL(string: "https://h/v1")!, apiKey: "k", asrModel: "asr", summaryModel: "sum",
+                         outputDir: URL(fileURLWithPath: "/tmp/x"), transcriptionPromptFile: asr, summaryPromptFile: sum)
+        return APIClient(config: cfg, transport: t)
+    }
+
+    @Test func test_transcription_prompt_sent() async throws {
+        let t = FakeTransport(#"{"text":"x"}"#)
+        _ = try await client(t, asr: try file("Термины: Телемост, Konspekt\n")).transcribe(wav: Data([1]))
+        let body = String(decoding: t.requests[0].httpBody ?? Data(), as: UTF8.self)
+        #expect(body.contains("name=\"prompt\"\r\n\r\nТермины: Телемост, Konspekt\r\n"))
+    }
+
+    @Test func test_no_transcription_prompt_by_default() async throws {
+        let t = FakeTransport(#"{"text":"x"}"#)
+        _ = try await makeClient(t).transcribe(wav: Data([1]))
+        #expect(!String(decoding: t.requests[0].httpBody ?? Data(), as: UTF8.self).contains("name=\"prompt\""))
+    }
+
+    @Test func test_summary_prompt_replaces_default() async throws {
+        let t = FakeTransport(#"{"choices":[{"message":{"content":"ok"}}]}"#)
+        _ = try await client(t, sum: try file("  Свой промпт\n")).summarize(transcript: "a")
+        let j = try #require(JSONSerialization.jsonObject(with: t.requests[0].httpBody!) as? [String: Any])
+        let msgs = try #require(j["messages"] as? [[String: String]])
+        #expect(msgs[0]["content"] == "Свой промпт")
+    }
+
+    @Test func test_empty_summary_prompt_uses_default() async throws {
+        let t = FakeTransport(#"{"choices":[{"message":{"content":"ok"}}]}"#)
+        _ = try await client(t, sum: try file(" \n")).summarize(transcript: "a")
+        let j = try #require(JSONSerialization.jsonObject(with: t.requests[0].httpBody!) as? [String: Any])
+        #expect((j["messages"] as? [[String: String]])?[0]["content"] == APIClient.systemPrompt)
+    }
+
+    @Test func test_missing_prompt_file_throws() async {
+        let f = URL(fileURLWithPath: "/nonexistent/\(UUID().uuidString)")
+        let t = FakeTransport(#"{"text":"x"}"#)
+        await #expect(throws: ConfigError.unreadable(f.path)) { try await client(t, asr: f).transcribe(wav: Data()) }
+        await #expect(throws: ConfigError.unreadable(f.path)) { try await client(t, sum: f).summarize(transcript: "a") }
+        #expect(t.requests.isEmpty)
+    }
+}
+
 @Suite struct APIKeyRedactionTests {
     @Test func test_key_redacted_in_http_error() async {
         let t = FakeTransport("Incorrect API key: secret-key-123", 401)

@@ -18,6 +18,16 @@ import Foundation
         #expect(c.asrModel == "asr")
         #expect(c.summaryModel == "qwen-3.8-27b")
         #expect(c.outputDir.path == home.appendingPathComponent("Documents/Konspekt").path)
+        #expect(c.transcriptionPromptFile == nil)
+        #expect(c.summaryPromptFile == nil)
+    }
+    @Test func test_prompt_files() throws {
+        let c = try load("OPENAI_BASE_URL=https://h\nOPENAI_API_KEY=k\nOPENAI_MODEL_NAME=a\n"
+            + "TRANSCRIPTION_PROMPT_FILE=~/p/asr.txt\nSUMMARY_PROMPT_FILE=/tmp/sum.md")
+        #expect(c.transcriptionPromptFile?.path == home.appendingPathComponent("p/asr.txt").path)
+        #expect(c.summaryPromptFile?.path == "/tmp/sum.md")
+        let empty = try load("OPENAI_BASE_URL=https://h\nOPENAI_API_KEY=k\nOPENAI_MODEL_NAME=a\nSUMMARY_PROMPT_FILE=")
+        #expect(empty.summaryPromptFile == nil)
     }
     @Test func test_missing_key_throws() {
         #expect(throws: ConfigError.missing("OPENAI_API_KEY")) {

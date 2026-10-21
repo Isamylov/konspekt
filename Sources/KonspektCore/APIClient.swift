@@ -51,12 +51,22 @@ public struct APIClient: Transcriber, Summarizer {
         APIClient(config: config, asr: URLSessionTransport(timeout: 300), chat: URLSessionTransport(timeout: 900))
     }
 
-    static let systemPrompt = """
+    public static let systemPrompt = """
     Ты помощник, который составляет конспект рабочего звонка по его расшифровке. \
     Ответь на русском языке в формате Markdown с разделами: \
     ## Кратко, ## Решения, ## Задачи (кто что делает и к какому сроку, если названо), ## Открытые вопросы. \
     Не выдумывай факты, которых нет в расшифровке. Если раздел пуст, напиши «нет».
     """
+
+    /// Trimmed contents of a prompt file, nil when no file is set or it is empty.
+    private func prompt(_ file: URL?) throws -> String? {
+        guard let file else { return nil }
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else {
+            throw ConfigError.unreadable(file.path)
+        }
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
+    }
 
     private func perform(_ req: URLRequest, via t: HTTPTransport) async throws -> Data {
         let data: Data
@@ -88,6 +98,9 @@ public struct APIClient: Transcriber, Summarizer {
         var body = Data()
         func add(_ s: String) { body.append(Data(s.utf8)) }
         add("--\(boundary)\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n\(config.asrModel)\r\n")
+        if let p = try prompt(config.transcriptionPromptFile) {
+            add("--\(boundary)\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\n\(p)\r\n")
+        }
         add("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\nContent-Type: audio/wav\r\n\r\n")
         body.append(wav)
         add("\r\n--\(boundary)--\r\n")
@@ -101,9 +114,10 @@ public struct APIClient: Transcriber, Summarizer {
     }
 
     public func summarize(transcript: String) async throws -> String {
+        let system = try prompt(config.summaryPromptFile) ?? Self.systemPrompt
         let payload: [String: Any] = [
             "model": config.summaryModel,
-            "messages": [["role": "system", "content": Self.systemPrompt],
+            "messages": [["role": "system", "content": system],
                          ["role": "user", "content": transcript]],
             "max_tokens": 4000,
             "temperature": 0.3,
